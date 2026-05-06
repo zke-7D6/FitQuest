@@ -215,6 +215,134 @@ final List<Quest> allQuests = [
     physicalGain: 'Uphill walking activates your glutes and burns 50% more than flat walks.',
     achievement: 'You found high ground. A warrior always scouts the terrain!',
   ),
+
+  // ─── NEW QUESTS ─────────────────────────────────────────────────────
+  Quest(
+    id: 'temple_run', title: 'Temple Run', category: 'Walk',
+    icon: '🛕', difficulty: 'Medium', diffCol: AppColors.warning,
+    xp: 170, kcal: 210, steps: 3600, time: '~25–40 min',
+    radiusMeters: 1800,
+    verifyLabel: 'Walk 1.8 km from your starting point',
+    tags: ['Outdoor', 'Culture', 'GPS'], type: 'gps',
+    desc: 'Walk 1.8 km to find a temple, mosque, church, or any place of worship.',
+    detail: 'Head out and walk at least 1.8 km from where you started. '
+        'Find any place of worship — temple, mosque, church, gurudwara, or shrine. '
+        'Spend a moment of reflection there. Tap "Check My Location" when done.',
+    physicalGain: 'Walking to sacred places combines physical exercise with mental peace.',
+    achievement: 'You walked to a place of peace. Body and soul workout!',
+  ),
+  Quest(
+    id: 'midnight_walker', title: 'Midnight Walker', category: 'Walk',
+    icon: '🌙', difficulty: 'Hard', diffCol: AppColors.danger,
+    xp: 280, kcal: 290, steps: 5200, time: '~35–50 min',
+    radiusMeters: 3000,
+    verifyLabel: 'Walk 3 km from your starting point',
+    tags: ['Night', 'Endurance', 'GPS'], type: 'gps',
+    desc: 'Walk 3 km after sunset. The city looks different at night.',
+    detail: 'After sunset, head out and walk at least 3 km from where you started. '
+        'Stick to well-lit, safe areas. Notice how different the same streets look at night. '
+        'Tap "Check My Location" when you\'ve covered the distance.',
+    physicalGain: 'Evening walks help digest dinner and improve sleep quality significantly.',
+    achievement: 'You owned the night. While others watched screens, you moved!',
+  ),
+  Quest(
+    id: 'street_food_scout', title: 'Street Food Scout', category: 'Find',
+    icon: '🍜', difficulty: 'Easy', diffCol: AppColors.success,
+    xp: 110, kcal: 100, steps: 1800, time: '~15–25 min',
+    radiusMeters: 900,
+    verifyLabel: 'Walk 900 m from your starting point',
+    tags: ['Food', 'Discovery', 'Walking'], type: 'honour',
+    desc: 'Walk 900 m and find a street food stall you\'ve never tried.',
+    detail: 'Walk at least 900 m from where you started. Find a street food cart, '
+        'chaat stall, juice shop, or any food vendor you haven\'t tried before. '
+        'You don\'t have to buy anything — just discover it. Tap "I Found It!" when done.',
+    physicalGain: 'Exploring on foot builds a natural exercise habit without effort.',
+    achievement: 'You discovered new food spots. Explorer AND food lover!',
+  ),
+  Quest(
+    id: 'photo_walk', title: 'Photography Walk', category: 'Find',
+    icon: '📸', difficulty: 'Medium', diffCol: AppColors.warning,
+    xp: 150, kcal: 170, steps: 3000, time: '~25–40 min',
+    radiusMeters: 1500,
+    verifyLabel: 'Walk 1.5 km from your starting point',
+    tags: ['Creative', 'Outdoor', 'Mindful'], type: 'honour',
+    desc: 'Walk 1.5 km and take 3 interesting photos of things you notice.',
+    detail: 'Walk at least 1.5 km from where you started. Along the way, notice 3 things '
+        'that catch your eye — textures, patterns, animals, people, or light. '
+        'Take a photo of each. Tap "I Completed This" when done.',
+    physicalGain: 'Combining walking with creativity doubles the brain benefits.',
+    achievement: 'You walked with your eyes wide open. That\'s active mindfulness!',
+  ),
+  Quest(
+    id: 'bridge_finder', title: 'Bridge Finder', category: 'Find',
+    icon: '🌉', difficulty: 'Hard', diffCol: AppColors.danger,
+    xp: 200, kcal: 240, steps: 4200, time: '~30–50 min',
+    radiusMeters: 2000,
+    verifyLabel: 'Walk 2 km from your starting point',
+    tags: ['Outdoor', 'Exploration', 'GPS'], type: 'gps',
+    desc: 'Walk 2 km and find a bridge — flyover, footbridge, or railway overpass.',
+    detail: 'Head out and walk at least 2 km from where you started. '
+        'Find any bridge structure — a flyover, pedestrian bridge, railway overpass, or canal bridge. '
+        'Walk across it. Tap "Check My Location" when you\'ve covered the distance.',
+    physicalGain: 'Long exploration walks build cardiovascular endurance steadily.',
+    achievement: 'You found a bridge and crossed it. Literally and metaphorically!',
+  ),
+  Quest(
+    id: 'staircase_racer', title: 'Staircase Racer', category: 'Challenge',
+    icon: '🏢', difficulty: 'Medium', diffCol: AppColors.warning,
+    xp: 220, kcal: 180, steps: 600, time: '~10–20 min',
+    radiusMeters: 500,
+    verifyLabel: 'Leave your building (500 m movement)',
+    tags: ['Cardio', 'Legs', 'Intensity'], type: 'honour',
+    desc: 'Sprint up 5 flights of stairs, walk down, repeat 3 times.',
+    detail: 'Find a staircase with at least 5 flights. Sprint up as fast as you safely can, '
+        'then walk down slowly. Repeat this 3 times total. Rest 30 seconds between rounds. '
+        'GPS will verify you moved. Tap "I Completed This" when done.',
+    physicalGain: 'Stair sprints are one of the most efficient HIIT exercises — builds power.',
+    achievement: 'Three rounds of stair sprints. Your heart rate went through the roof!',
+  ),
+
+  // ─── DAILY QUESTS (repeatable) ──────────────────────────────────────
+  Quest(
+    id: 'daily_1km', title: 'Daily: Walk 1 KM', category: 'Daily',
+    icon: '🚶', difficulty: 'Easy', diffCol: AppColors.success,
+    xp: 50, kcal: 60, steps: 1300, time: '~10–15 min',
+    radiusMeters: 1000,
+    verifyLabel: 'Walk 1 km from your starting point',
+    tags: ['Daily', 'Walking', 'GPS'], type: 'gps',
+    desc: 'Walk 1 km today. Simple, effective, daily.',
+    detail: 'Walk at least 1 km from where you started. This quest resets daily. '
+        'Tap "Check My Location" when done.',
+    physicalGain: 'Even 1 km daily reduces heart disease risk by 20%.',
+    achievement: 'Daily kilometer done. Consistency is the real superpower!',
+  ),
+  Quest(
+    id: 'daily_blue', title: 'Daily: Find Blue', category: 'Daily',
+    icon: '🔵', difficulty: 'Easy', diffCol: AppColors.success,
+    xp: 30, kcal: 40, steps: 800, time: '~10 min',
+    radiusMeters: 500,
+    verifyLabel: 'Walk 500 m from your starting point',
+    tags: ['Daily', 'Observation', 'Mindful'], type: 'honour',
+    desc: 'Walk 500 m and find something blue that isn\'t the sky.',
+    detail: 'Walk at least 500 m from where you started. Find a blue object — '
+        'NOT the sky or a vehicle. A door, flower, sign, wall, etc. '
+        'Tap "I Found It!" when done.',
+    physicalGain: 'Mindful short walks are proven stress reducers.',
+    achievement: 'You found blue in the wild. Quick eyes!',
+  ),
+  Quest(
+    id: 'daily_climb', title: 'Daily: 5-Floor Climb', category: 'Daily',
+    icon: '🧗', difficulty: 'Easy', diffCol: AppColors.success,
+    xp: 40, kcal: 50, steps: 400, time: '~5–10 min',
+    radiusMeters: 200,
+    verifyLabel: 'Climb 5 floors',
+    tags: ['Daily', 'Cardio', 'Strength'], type: 'honour',
+    desc: 'Climb 5 flights of stairs. No elevator.',
+    detail: 'Find any staircase and climb 5 floors without using the elevator. '
+        'Take your time. Tap "I Completed This" when done.',
+    physicalGain: '5 floors of stairs = 2 minutes of intense cardio.',
+    achievement: 'Five floors climbed. Your legs thank you!',
+  ),
 ];
 
 class QuestScreen extends StatefulWidget {
@@ -232,7 +360,7 @@ class _QuestScreenState extends State<QuestScreen> {
   Map<String, int> _abandonCounts = {};
   List<String> get _abandonedIds => _abandonCounts.keys.toList();
 
-  final _filters = ['All', 'Walk', 'Find', 'Challenge'];
+  final _filters = ['All', 'Walk', 'Find', 'Challenge', 'Daily'];
 
   @override
   void initState() {

@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'main.dart';
+import 'mental_health_screen.dart';
 
 class HealthScreen extends StatefulWidget {
   const HealthScreen({super.key});
@@ -15,13 +16,15 @@ class _HealthScreenState extends State<HealthScreen> {
   final _ageCtrl    = TextEditingController();
   final _weightCtrl = TextEditingController();
   final _heightCtrl = TextEditingController();
+  final _waistCtrl  = TextEditingController();
+  final _neckCtrl   = TextEditingController();
+  final _hipCtrl    = TextEditingController();
   String _activity = 'Moderately Active';
   String _gender   = 'Male';
   String _dietType = 'Vegetarian';
   bool _saved      = false;
   bool _loadingData = true;
   Map<String, dynamic>? _result;
-  int _tab = 0; // 0=overview 1=diet 2=workout
   int _planSeed = _todaySeed();
 
   static int _todaySeed() {
@@ -50,6 +53,7 @@ class _HealthScreenState extends State<HealthScreen> {
   @override
   void dispose() {
     _ageCtrl.dispose(); _weightCtrl.dispose(); _heightCtrl.dispose();
+    _waistCtrl.dispose(); _neckCtrl.dispose(); _hipCtrl.dispose();
     super.dispose();
   }
 
@@ -65,6 +69,9 @@ class _HealthScreenState extends State<HealthScreen> {
           _ageCtrl.text    = data['age']?.toString() ?? '';
           _weightCtrl.text = data['weight']?.toString() ?? '';
           _heightCtrl.text = data['height']?.toString() ?? '';
+          _waistCtrl.text  = data['waist']?.toString() ?? '';
+          _neckCtrl.text   = data['neck']?.toString() ?? '';
+          _hipCtrl.text    = data['hip']?.toString() ?? '';
           _gender   = data['gender'] ?? 'Male';
           _activity = data['activity'] ?? 'Moderately Active';
           _dietType = data['dietType'] ?? 'Vegetarian';
@@ -103,6 +110,42 @@ class _HealthScreenState extends State<HealthScreen> {
     return 'Maintenance calories';
   }
 
+  /// Navy method body fat estimation
+  double? _calcBodyFat(double height, String gender) {
+    final waist = double.tryParse(_waistCtrl.text);
+    final neck = double.tryParse(_neckCtrl.text);
+    if (waist == null || neck == null || waist <= 0 || neck <= 0) return null;
+    if (gender == 'Female') {
+      final hip = double.tryParse(_hipCtrl.text);
+      if (hip == null || hip <= 0) return null;
+      return (495 / (1.29579 - 0.35004 * _log10(waist + hip - neck) + 0.22100 * _log10(height)) - 450).clamp(3, 60);
+    }
+    return (495 / (1.0324 - 0.19077 * _log10(waist - neck) + 0.15456 * _log10(height)) - 450).clamp(3, 60);
+  }
+
+  /// Deurenberg BMI-based body fat fallback
+  double _bmiBodyFat(double bmi, int age, String gender) {
+    final s = gender == 'Male' ? 1 : 0;
+    return (1.20 * bmi + 0.23 * age - 10.8 * s - 5.4).clamp(3, 60);
+  }
+
+  double _log10(double x) => log(x) / ln10;
+
+  /// Macro split ratios by body type
+  Map<String, double> _macroRatios(String type) {
+    switch (type) {
+      case 'underweight': return {'protein': 0.25, 'carbs': 0.50, 'fat': 0.25};
+      case 'healthy': return {'protein': 0.30, 'carbs': 0.45, 'fat': 0.25};
+      case 'overweight': return {'protein': 0.35, 'carbs': 0.35, 'fat': 0.30};
+      default: return {'protein': 0.40, 'carbs': 0.30, 'fat': 0.30};
+    }
+  }
+
+  /// Meal calorie distribution ratios
+  Map<String, double> get _mealSplit => {
+    'breakfast': 0.25, 'snack1': 0.10, 'lunch': 0.30, 'snack2': 0.10, 'dinner': 0.25,
+  };
+
   Future<void> _saveData() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
@@ -110,6 +153,9 @@ class _HealthScreenState extends State<HealthScreen> {
       'age': int.tryParse(_ageCtrl.text),
       'weight': double.tryParse(_weightCtrl.text),
       'height': double.tryParse(_heightCtrl.text),
+      'waist': double.tryParse(_waistCtrl.text),
+      'neck': double.tryParse(_neckCtrl.text),
+      'hip': double.tryParse(_hipCtrl.text),
       'gender': _gender, 'activity': _activity, 'dietType': _dietType,
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
@@ -128,24 +174,43 @@ class _HealthScreenState extends State<HealthScreen> {
     }
     final h = height / 100;
     final bmi = weight / (h * h);
+
+    // Revised Harris-Benedict BMR
     final bmr = _gender == 'Male'
-        ? 10 * weight + 6.25 * height - 5 * age + 5
-        : 10 * weight + 6.25 * height - 5 * age - 161;
+        ? 88.362 + 13.397 * weight + 4.799 * height - 5.677 * age
+        : 447.593 + 9.247 * weight + 3.098 * height - 4.330 * age;
     final multipliers = {
       'Sedentary': 1.2, 'Lightly Active': 1.375,
       'Moderately Active': 1.55, 'Very Active': 1.725
     };
-    final tdee = bmr * multipliers[_activity]!;
+    final rawTdee = bmr * multipliers[_activity]!;
+    // Add TEF (Thermic Effect of Food) — ~10%
+    final tdee = rawTdee * 1.10;
+
+    // Body fat
+    double? bodyFat = _calcBodyFat(height, _gender);
+    bodyFat ??= _bmiBodyFat(bmi, age, _gender);
+
     String cat; Color col; String type;
     if (bmi < 18.5) { cat = 'Underweight'; col = AppColors.neon2; type = 'underweight'; }
     else if (bmi < 25) { cat = 'Healthy'; col = AppColors.success; type = 'healthy'; }
     else if (bmi < 30) { cat = 'Overweight'; col = AppColors.warning; type = 'overweight'; }
     else { cat = 'Obese'; col = AppColors.danger; type = 'obese'; }
-    if (mounted) setState(() {
-      final tdeeInt = tdee.round();
-      final adjustment = _calorieAdjustment(type, tdeeInt);
-      final targetCal = (tdeeInt + adjustment).clamp(_safeCalorieFloor(), 6000).toInt();
 
+    final tdeeInt = tdee.round();
+    final adjustment = _calorieAdjustment(type, tdeeInt);
+    final targetCal = (tdeeInt + adjustment).clamp(_safeCalorieFloor(), 6000).toInt();
+
+    // Macros
+    final ratios = _macroRatios(type);
+    final proteinG = (targetCal * ratios['protein']! / 4).round();
+    final carbsG = (targetCal * ratios['carbs']! / 4).round();
+    final fatG = (targetCal * ratios['fat']! / 9).round();
+
+    // Water intake: 35ml per kg
+    final waterMl = (weight * 35).round();
+
+    if (mounted) setState(() {
       _result = {
         'bmi': bmi,
         'cat': cat,
@@ -154,7 +219,11 @@ class _HealthScreenState extends State<HealthScreen> {
         'type': type,
         'adjustment': adjustment,
         'targetCal': targetCal,
-        // Kept for compatibility with older UI logic.
+        'bodyFat': bodyFat,
+        'proteinG': proteinG,
+        'carbsG': carbsG,
+        'fatG': fatG,
+        'waterMl': waterMl,
         'deficit': targetCal,
         'surplus': targetCal,
       };
@@ -260,6 +329,22 @@ class _HealthScreenState extends State<HealthScreen> {
                         action: TextInputAction.next)),
                       const SizedBox(width: 8),
                       Expanded(child: _statBox(_heightCtrl, 'Height', 'cm',
+                        action: TextInputAction.next)),
+                    ]),
+                    const SizedBox(height: 10),
+
+                    // Body measurements for body fat (optional)
+                    Text('BODY FAT (optional)', style: GoogleFonts.pressStart2p(
+                      fontSize: 6, color: AppColors.textMuted)),
+                    const SizedBox(height: 6),
+                    Row(children: [
+                      Expanded(child: _statBox(_waistCtrl, 'Waist', 'cm',
+                        action: TextInputAction.next)),
+                      const SizedBox(width: 8),
+                      Expanded(child: _statBox(_neckCtrl, 'Neck', 'cm',
+                        action: TextInputAction.next)),
+                      const SizedBox(width: 8),
+                      Expanded(child: _statBox(_hipCtrl, _gender == 'Female' ? 'Hip' : 'Hip ♀', 'cm',
                         action: TextInputAction.done, onDone: _analyse)),
                     ]),
                     const SizedBox(height: 10),
@@ -343,42 +428,131 @@ class _HealthScreenState extends State<HealthScreen> {
     final cat  = _result!['cat'] as String;
     final col  = _result!['col'] as Color;
     final tdee = _result!['tdee'] as int;
+    final bodyFat = _result!['bodyFat'] as double?;
+    final proteinG = _result!['proteinG'] as int;
+    final carbsG = _result!['carbsG'] as int;
+    final fatG = _result!['fatG'] as int;
+    final waterMl = _result!['waterMl'] as int;
+    final targetCal = _result!['targetCal'] as int;
+
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      // Metric cards
+      // Metric cards row 1
       Row(children: [
         Expanded(child: _metricCard('BMI', bmi.toStringAsFixed(1), cat, col)),
         const SizedBox(width: 10),
         Expanded(child: _metricCard('CALORIES', '$tdee', 'kcal/day', AppColors.neon2)),
       ]),
+      const SizedBox(height: 10),
+
+      // Metric cards row 2: body fat + target
+      Row(children: [
+        Expanded(child: _metricCard('BODY FAT',
+          bodyFat != null ? '${bodyFat.toStringAsFixed(1)}%' : '—',
+          bodyFat != null
+            ? (bodyFat < 15 ? 'Athletic' : bodyFat < 25 ? 'Fit' : bodyFat < 32 ? 'Average' : 'High')
+            : 'Add measurements',
+          bodyFat != null
+            ? (bodyFat < 15 ? AppColors.neon2 : bodyFat < 25 ? AppColors.success : bodyFat < 32 ? AppColors.warning : AppColors.danger)
+            : AppColors.textMuted)),
+        const SizedBox(width: 10),
+        Expanded(child: _metricCard('TARGET', '$targetCal', 'kcal/day', AppColors.accent)),
+      ]),
+      const SizedBox(height: 10),
+
+      // Macros card
+      Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          border: Border.all(color: AppColors.accent.withOpacity(0.3))),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('DAILY MACROS', style: GoogleFonts.pressStart2p(
+            fontSize: 7, color: AppColors.accent)),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(child: _macroPill('🟢 Protein', '${proteinG}g', AppColors.success)),
+            const SizedBox(width: 6),
+            Expanded(child: _macroPill('🟡 Carbs', '${carbsG}g', AppColors.warning)),
+            const SizedBox(width: 6),
+            Expanded(child: _macroPill('🔴 Fat', '${fatG}g', AppColors.danger)),
+          ]),
+          const SizedBox(height: 8),
+          Row(children: [
+            const Icon(Icons.water_drop_outlined, color: AppColors.neon2, size: 14),
+            const SizedBox(width: 6),
+            Text('Water: ${(waterMl / 1000).toStringAsFixed(1)}L/day (${waterMl}ml)',
+              style: GoogleFonts.dmSans(fontSize: 12, color: AppColors.neon2)),
+          ]),
+        ]),
+      ),
       const SizedBox(height: 16),
 
-      // Tab switcher
-      Container(
-        padding: const EdgeInsets.all(3),
+      // Navigation buttons to full pages
+      _navButton('📊', 'OVERVIEW', 'Health tips & insights', () {
+        Navigator.push(context, MaterialPageRoute(
+          builder: (_) => _OverviewPage(result: _result!)));
+      }),
+      const SizedBox(height: 8),
+      _navButton('🥗', 'DIET PLAN', 'Today\'s meals & nutrition', () {
+        Navigator.push(context, MaterialPageRoute(
+          builder: (_) => _DietPage(
+            result: _result!, dietType: _dietType,
+            planSeed: _planSeed, onShuffle: () {
+              setState(() => _planSeed = DateTime.now().millisecondsSinceEpoch);
+            },
+            pick: _pick, seedFor: _seedFor,
+            getMeals: _getMeals, mealSplit: _mealSplit,
+          )));
+      }),
+      const SizedBox(height: 8),
+      _navButton('💪', 'WORKOUT PLAN', 'Smart adaptive training', () {
+        Navigator.push(context, MaterialPageRoute(
+          builder: (_) => _WorkoutPage(
+            result: _result!, gender: _gender, activity: _activity,
+            pick: _pick, seedFor: _seedFor,
+            getWorkoutStages: _getWorkoutStages,
+          )));
+      }),
+      const SizedBox(height: 8),
+      _navButton('🧘', 'MIND & WELLNESS', 'Breathing, journal, sleep', () {
+        Navigator.push(context, MaterialPageRoute(
+          builder: (_) => const MentalHealthScreen()));
+      }),
+    ]);
+  }
+
+  Widget _macroPill(String label, String val, Color col) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+    decoration: BoxDecoration(
+      color: col.withOpacity(0.08),
+      border: Border.all(color: col.withOpacity(0.3))),
+    child: Column(children: [
+      Text(val, style: GoogleFonts.pressStart2p(fontSize: 12, color: col)),
+      const SizedBox(height: 2),
+      Text(label, style: GoogleFonts.dmSans(fontSize: 10, color: AppColors.textMuted)),
+    ]));
+
+  Widget _navButton(String emoji, String title, String subtitle, VoidCallback onTap) =>
+    GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: AppColors.card,
           border: Border.all(color: AppColors.border)),
-        child: Row(children: ['Overview', 'Diet', 'Workout'].asMap().entries.map((e) {
-          final sel = _tab == e.key;
-          return Expanded(child: GestureDetector(
-            onTap: () => setState(() => _tab = e.key),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              color: sel ? AppColors.accent : Colors.transparent,
-              child: Center(child: Text(e.value,
-                style: GoogleFonts.pressStart2p(
-                  fontSize: 7,
-                  color: sel ? AppColors.bg : AppColors.textSecondary))))));
-        }).toList()),
-      ),
-      const SizedBox(height: 14),
-
-      if (_tab == 0) _overviewTab(),
-      if (_tab == 1) _dietTab(),
-      if (_tab == 2) _workoutTab(),
-    ]);
-  }
+        child: Row(children: [
+          Text(emoji, style: const TextStyle(fontSize: 24)),
+          const SizedBox(width: 14),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title, style: GoogleFonts.pressStart2p(
+              fontSize: 8, color: AppColors.textPrimary)),
+            const SizedBox(height: 3),
+            Text(subtitle, style: GoogleFonts.dmSans(
+              fontSize: 12, color: AppColors.textMuted)),
+          ])),
+          const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+        ])),
+    );
 
   Widget _metricCard(String title, String val, String sub, Color col) => Container(
     padding: const EdgeInsets.all(14),
@@ -1312,4 +1486,414 @@ class _HealthScreenState extends State<HealthScreen> {
     ];
   }
 
+}
+
+// ─── FULL PAGE WRAPPERS ─────────────────────────────────────────────────────
+
+class _OverviewPage extends StatelessWidget {
+  final Map<String, dynamic> result;
+  const _OverviewPage({required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    final type = result['type'] as String;
+    final tips = <Map<String, String>>[
+      if (type == 'underweight') ...[
+        {'e': '🥜', 't': 'Add healthy fats to every meal — nuts, avocado, ghee, peanut butter.'},
+        {'e': '🏋️', 't': 'Focus on strength training 3x/week to build muscle, not just eat more.'},
+        {'e': '😴', 't': 'Sleep 8 hours — your body builds muscle during sleep, not during workouts.'},
+        {'e': '🥛', 't': 'Protein at every meal: eggs, paneer, dal, chicken, or Greek yogurt.'},
+        {'e': '📈', 't': 'Track your weight weekly. Aim to gain 0.5 kg per week maximum.'},
+      ] else if (type == 'healthy') ...[
+        {'e': '✅', 't': 'You\'re in a great range. Focus on performance, not just weight.'},
+        {'e': '🏃', 't': '150 min of moderate cardio per week is the gold standard for heart health.'},
+        {'e': '💧', 't': 'Drink 35 ml of water per kg of bodyweight daily.'},
+        {'e': '🧘', 't': 'Add one flexibility session per week to prevent injury.'},
+        {'e': '📊', 't': 'Weigh yourself weekly at the same time — morning, after bathroom.'},
+      ] else if (type == 'overweight') ...[
+        {'e': '🔥', 't': 'A 300–500 calorie daily deficit leads to safe fat loss of 0.5 kg/week.'},
+        {'e': '🚶', 't': '45 min brisk walks 5x/week burns more calories than most people think.'},
+        {'e': '🥦', 't': 'Cut sugar, maida, and packaged food first — these are the biggest culprits.'},
+        {'e': '⏰', 't': 'Eat dinner before 7:30 PM. Late eating stores more fat.'},
+        {'e': '📉', 't': 'Don\'t aim to lose more than 1 kg/week — slow loss is permanent loss.'},
+      ] else ...[
+        {'e': '🩺', 't': 'Talk to a doctor before starting any exercise program.'},
+        {'e': '🚶', 't': 'Start with 15–20 min walks daily. Add 5 min every week.'},
+        {'e': '🍎', 't': 'Replace all drinks with water. No soda, no juice, no sugar in chai.'},
+        {'e': '🛌', 't': 'Poor sleep causes weight gain — fix your sleep before your diet.'},
+        {'e': '🧠', 't': 'Mental health matters as much as physical. Be kind to yourself.'},
+      ],
+    ];
+
+    // Summary stats
+    final bmi = result['bmi'] as double;
+    final bodyFat = result['bodyFat'] as double?;
+    final waterMl = result['waterMl'] as int;
+    final tdee = result['tdee'] as int;
+    final targetCal = result['targetCal'] as int;
+
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      appBar: AppBar(
+        backgroundColor: AppColors.bg, elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded, color: AppColors.textSecondary),
+          onPressed: () => Navigator.pop(context)),
+        title: Text('OVERVIEW', style: GoogleFonts.pressStart2p(
+          fontSize: 10, color: AppColors.accent)),
+      ),
+      body: SafeArea(child: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // Summary banner
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.accentDim,
+              border: Border.all(color: AppColors.accent.withOpacity(0.3))),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('YOUR NUMBERS', style: GoogleFonts.pressStart2p(
+                fontSize: 7, color: AppColors.accent)),
+              const SizedBox(height: 10),
+              Wrap(spacing: 12, runSpacing: 8, children: [
+                _statChip('BMI', bmi.toStringAsFixed(1)),
+                if (bodyFat != null) _statChip('Body Fat', '${bodyFat.toStringAsFixed(1)}%'),
+                _statChip('TDEE', '$tdee kcal'),
+                _statChip('Target', '$targetCal kcal'),
+                _statChip('Water', '${(waterMl / 1000).toStringAsFixed(1)}L'),
+              ]),
+            ]),
+          ),
+          const SizedBox(height: 20),
+          Text('TIPS FOR YOU', style: GoogleFonts.pressStart2p(
+            fontSize: 8, color: AppColors.accent)),
+          const SizedBox(height: 12),
+          ...tips.map((t) => Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.card, border: Border.all(color: AppColors.border)),
+            child: Row(children: [
+              Text(t['e']!, style: const TextStyle(fontSize: 20)),
+              const SizedBox(width: 12),
+              Expanded(child: Text(t['t']!, style: GoogleFonts.dmSans(
+                fontSize: 13, color: AppColors.textSecondary, height: 1.45))),
+            ]))),
+        ]),
+      )),
+    );
+  }
+
+  Widget _statChip(String label, String val) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    decoration: BoxDecoration(
+      color: AppColors.card, border: Border.all(color: AppColors.border)),
+    child: Row(mainAxisSize: MainAxisSize.min, children: [
+      Text('$label: ', style: GoogleFonts.dmSans(fontSize: 11, color: AppColors.textMuted)),
+      Text(val, style: GoogleFonts.dmSans(fontSize: 11, color: AppColors.accent, fontWeight: FontWeight.w700)),
+    ]));
+}
+
+// ─── DIET FULL PAGE ─────────────────────────────────────────────────────────
+
+class _DietPage extends StatefulWidget {
+  final Map<String, dynamic> result;
+  final String dietType;
+  final int planSeed;
+  final VoidCallback onShuffle;
+  final T Function<T>(String key, List<T> list) pick;
+  final int Function(String key) seedFor;
+  final List<Map<String, dynamic>> Function(String type, String diet, int targetCal) getMeals;
+  final Map<String, double> mealSplit;
+
+  const _DietPage({
+    required this.result, required this.dietType, required this.planSeed,
+    required this.onShuffle, required this.pick, required this.seedFor,
+    required this.getMeals, required this.mealSplit,
+  });
+  @override
+  State<_DietPage> createState() => _DietPageState();
+}
+
+class _DietPageState extends State<_DietPage> {
+  late int _localSeed;
+
+  @override
+  void initState() {
+    super.initState();
+    _localSeed = widget.planSeed;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final type = widget.result['type'] as String;
+    final tdee = widget.result['tdee'] as int;
+    final targetCal = widget.result['targetCal'] as int;
+    final adjustment = widget.result['adjustment'] as int;
+    final proteinG = widget.result['proteinG'] as int;
+    final carbsG = widget.result['carbsG'] as int;
+    final fatG = widget.result['fatG'] as int;
+
+    String targetLabel;
+    if (adjustment > 0) targetLabel = 'Safe surplus +$adjustment kcal';
+    else if (adjustment < 0) targetLabel = 'Safe deficit $adjustment kcal';
+    else targetLabel = 'Maintenance';
+
+    final meals = widget.getMeals(type, widget.dietType, targetCal);
+    final totalMealCal = meals.fold<int>(0, (sum, m) {
+      final raw = m['kcal'];
+      return sum + (raw is int ? raw : int.tryParse(raw.toString()) ?? 0);
+    });
+
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      appBar: AppBar(
+        backgroundColor: AppColors.bg, elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded, color: AppColors.textSecondary),
+          onPressed: () => Navigator.pop(context)),
+        title: Text('DIET PLAN', style: GoogleFonts.pressStart2p(
+          fontSize: 10, color: AppColors.accent)),
+        actions: [
+          GestureDetector(
+            onTap: () {
+              setState(() => _localSeed = DateTime.now().millisecondsSinceEpoch);
+              widget.onShuffle();
+            },
+            child: Container(
+              margin: const EdgeInsets.only(right: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.bg,
+                border: Border.all(color: AppColors.accent.withOpacity(0.5))),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.shuffle_rounded, color: AppColors.accent, size: 14),
+                const SizedBox(width: 4),
+                Text('SHUFFLE', style: GoogleFonts.pressStart2p(
+                  fontSize: 6, color: AppColors.accent)),
+              ]),
+            ),
+          ),
+        ],
+      ),
+      body: SafeArea(child: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // Calorie + macro banner
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.accentDim,
+              border: Border.all(color: AppColors.accent.withOpacity(0.4))),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('~$totalMealCal kcal', style: GoogleFonts.pressStart2p(
+                fontSize: 18, color: AppColors.accent,
+                shadows: [Shadow(color: AppColors.accent, blurRadius: 10)])),
+              const SizedBox(height: 4),
+              Text('$targetLabel • Target: $targetCal kcal • TDEE: $tdee kcal',
+                style: GoogleFonts.dmSans(fontSize: 11, color: AppColors.textSecondary)),
+              const SizedBox(height: 8),
+              Row(children: [
+                _pill('P: ${proteinG}g', AppColors.success),
+                const SizedBox(width: 6),
+                _pill('C: ${carbsG}g', AppColors.warning),
+                const SizedBox(width: 6),
+                _pill('F: ${fatG}g', AppColors.danger),
+              ]),
+            ]),
+          ),
+          const SizedBox(height: 16),
+          ...meals.map((m) => _mealCard(m)),
+        ]),
+      )),
+    );
+  }
+
+  Widget _pill(String text, Color col) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      color: col.withOpacity(0.1),
+      border: Border.all(color: col.withOpacity(0.3))),
+    child: Text(text, style: GoogleFonts.pressStart2p(fontSize: 7, color: col)));
+
+  Widget _mealCard(Map<String, dynamic> meal) {
+    final mealKcal = int.tryParse(meal['kcal'].toString()) ?? 0;
+    // Estimate per-meal macros proportionally
+    final targetCal = widget.result['targetCal'] as int;
+    final ratio = targetCal > 0 ? mealKcal / targetCal : 0.2;
+    final mealP = (widget.result['proteinG'] as int) * ratio;
+    final mealC = (widget.result['carbsG'] as int) * ratio;
+    final mealF = (widget.result['fatG'] as int) * ratio;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: AppColors.card, border: Border.all(color: AppColors.border)),
+      child: Column(children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+          child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(meal['meal'], style: GoogleFonts.dmSans(
+                fontWeight: FontWeight.w700, fontSize: 15, color: AppColors.textPrimary)),
+              Text(meal['time'], style: GoogleFonts.dmSans(
+                fontSize: 11, color: AppColors.textMuted)),
+            ]),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              color: AppColors.accentDim,
+              child: Text('~${meal['kcal']} kcal', style: GoogleFonts.pressStart2p(
+                fontSize: 7, color: AppColors.accent))),
+          ])),
+        // Macro pills per meal
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: Row(children: [
+            _microPill('P:${mealP.round()}g', AppColors.success),
+            const SizedBox(width: 4),
+            _microPill('C:${mealC.round()}g', AppColors.warning),
+            const SizedBox(width: 4),
+            _microPill('F:${mealF.round()}g', AppColors.danger),
+          ])),
+        Container(height: 1, color: AppColors.border, margin: const EdgeInsets.only(top: 8)),
+        Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            ...(meal['items'] as List<String>).map((item) => Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(children: [
+                Container(width: 4, height: 4, color: AppColors.accent),
+                const SizedBox(width: 10),
+                Expanded(child: Text(item, style: GoogleFonts.dmSans(
+                  fontSize: 13, color: AppColors.textSecondary))),
+              ]))),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(10),
+              color: AppColors.bg,
+              child: Row(children: [
+                const Icon(Icons.lightbulb_outline_rounded, color: AppColors.accent, size: 14),
+                const SizedBox(width: 8),
+                Expanded(child: Text(meal['tip'], style: GoogleFonts.dmSans(
+                  fontSize: 12, color: AppColors.textMuted, fontStyle: FontStyle.italic))),
+              ])),
+          ])),
+      ]));
+  }
+
+  Widget _microPill(String text, Color col) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+    decoration: BoxDecoration(
+      color: col.withOpacity(0.08),
+      border: Border.all(color: col.withOpacity(0.2))),
+    child: Text(text, style: GoogleFonts.dmSans(fontSize: 9, color: col, fontWeight: FontWeight.w600)));
+}
+
+// ─── WORKOUT FULL PAGE ──────────────────────────────────────────────────────
+
+class _WorkoutPage extends StatelessWidget {
+  final Map<String, dynamic> result;
+  final String gender;
+  final String activity;
+  final T Function<T>(String key, List<T> list) pick;
+  final int Function(String key) seedFor;
+  final List<Map<String, dynamic>> Function(String type) getWorkoutStages;
+
+  const _WorkoutPage({
+    required this.result, required this.gender, required this.activity,
+    required this.pick, required this.seedFor, required this.getWorkoutStages,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final type = result['type'] as String;
+    final stages = getWorkoutStages(type);
+
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      appBar: AppBar(
+        backgroundColor: AppColors.bg, elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded, color: AppColors.textSecondary),
+          onPressed: () => Navigator.pop(context)),
+        title: Text('WORKOUT PLAN', style: GoogleFonts.pressStart2p(
+          fontSize: 10, color: AppColors.accent)),
+      ),
+      body: SafeArea(child: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            margin: const EdgeInsets.only(bottom: 14),
+            decoration: BoxDecoration(
+              color: AppColors.card, border: Border.all(color: AppColors.border)),
+            child: Row(children: [
+              const Icon(Icons.info_outline_rounded, color: AppColors.textMuted, size: 16),
+              const SizedBox(width: 10),
+              Expanded(child: Text(
+                'Start at Beginner and progress as you get stronger.',
+                style: GoogleFonts.dmSans(fontSize: 12, color: AppColors.textMuted, height: 1.4))),
+            ])),
+          ...stages.asMap().entries.map((e) => _workoutStage(e.value, e.key == stages.length - 1)),
+        ]),
+      )),
+    );
+  }
+
+  Widget _workoutStage(Map<String, dynamic> stage, bool isLast) {
+    final col = stage['col'] as Color;
+    final exercises = stage['exercises'] as List<Map<String, String>>;
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Column(children: [
+        Container(
+          width: 36, height: 36,
+          decoration: BoxDecoration(
+            color: col.withOpacity(0.12), shape: BoxShape.circle,
+            border: Border.all(color: col, width: 2)),
+          child: Center(child: Text(stage['icon'], style: const TextStyle(fontSize: 16)))),
+        if (!isLast) Container(width: 2, height: 24, color: AppColors.border,
+          margin: const EdgeInsets.symmetric(vertical: 4)),
+      ]),
+      const SizedBox(width: 12),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Text(stage['level'], style: GoogleFonts.dmSans(
+            fontWeight: FontWeight.w700, fontSize: 16, color: AppColors.textPrimary)),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            color: col.withOpacity(0.1),
+            child: Text(stage['weeks'], style: GoogleFonts.pressStart2p(
+              fontSize: 7, color: col))),
+        ]),
+        const SizedBox(height: 2),
+        Text(stage['focus'], style: GoogleFonts.dmSans(
+          fontSize: 12, color: AppColors.textMuted)),
+        const SizedBox(height: 4),
+        Text('${stage['days']}  ·  ${stage['cardio']}',
+          style: GoogleFonts.dmSans(fontSize: 12, color: AppColors.accent,
+            fontWeight: FontWeight.w500)),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.card, border: Border.all(color: AppColors.border)),
+          child: Column(children: exercises.asMap().entries.map((ex) {
+            final last = ex.key == exercises.length - 1;
+            return Column(children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  Expanded(child: Text(ex.value['name']!, style: GoogleFonts.dmSans(
+                    fontSize: 13, color: AppColors.textSecondary))),
+                  Text(ex.value['sets']!, style: GoogleFonts.dmSans(
+                    fontSize: 12, color: col, fontWeight: FontWeight.w600)),
+                ])),
+              if (!last) Container(height: 1, color: AppColors.border),
+            ]);
+          }).toList()),
+        ),
+        SizedBox(height: isLast ? 0 : 18),
+      ])),
+    ]);
+  }
 }

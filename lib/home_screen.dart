@@ -5,6 +5,8 @@ import 'profile_screen.dart';
 import 'health_screen.dart';
 import 'steps_screen.dart';
 import 'quest_screen.dart';
+import 'analytics_screen.dart';
+import 'social_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,6 +23,8 @@ class _HomeScreenState extends State<HomeScreen> {
     StepsScreen(),
     HealthScreen(),
     QuestScreen(),
+    AnalyticsScreen(),
+    SocialScreen(),
   ];
 
   @override
@@ -38,6 +42,8 @@ class _HomeScreenState extends State<HomeScreen> {
       _NavItem(Icons.directions_walk_rounded, Icons.directions_walk_outlined, 'Steps'),
       _NavItem(Icons.favorite_rounded, Icons.favorite_border_rounded, 'Health'),
       _NavItem(Icons.explore_rounded, Icons.explore_outlined, 'Quests'),
+      _NavItem(Icons.insights_rounded, Icons.insights_outlined, 'Stats'),
+      _NavItem(Icons.groups_rounded, Icons.groups_outlined, 'Social'),
     ];
 
     return Container(
@@ -55,7 +61,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+          padding: const EdgeInsets.fromLTRB(4, 6, 4, 8),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: items.asMap().entries.map((entry) {
@@ -69,11 +75,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
                     curve: Curves.easeOut,
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    margin: const EdgeInsets.symmetric(horizontal: 2),
+                    padding: const EdgeInsets.symmetric(vertical: 6),
                     decoration: BoxDecoration(
                       color: selected ? AppColors.accent.withOpacity(0.14) : Colors.transparent,
-                      borderRadius: BorderRadius.circular(22),
+                      borderRadius: BorderRadius.circular(16),
                       border: selected
                           ? Border.all(color: AppColors.accent.withOpacity(0.24))
                           : null,
@@ -83,8 +89,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         AnimatedContainer(
                           duration: const Duration(milliseconds: 180),
-                          width: selected ? 46 : 34,
-                          height: selected ? 46 : 34,
+                          width: selected ? 36 : 28,
+                          height: selected ? 36 : 28,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: selected ? AppColors.accent.withOpacity(0.15) : Colors.transparent,
@@ -92,26 +98,26 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ? [
                                     BoxShadow(
                                       color: AppColors.accent.withOpacity(0.22),
-                                      blurRadius: 18,
-                                      offset: const Offset(0, 6),
+                                      blurRadius: 14,
+                                      offset: const Offset(0, 4),
                                     ),
                                   ]
                                 : [],
                           ),
                           child: Icon(
                             selected ? item.active : item.inactive,
-                            size: selected ? 24 : 22,
+                            size: selected ? 20 : 18,
                             color: selected ? AppColors.accent : AppColors.textMuted,
                           ),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 2),
                         Text(
                           item.label,
                           style: GoogleFonts.dmSans(
-                            fontSize: 11,
+                            fontSize: 9,
                             fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
                             color: selected ? AppColors.accent : AppColors.textMuted,
-                            letterSpacing: 0.2,
+                            letterSpacing: 0.1,
                           ),
                         ),
                       ],
