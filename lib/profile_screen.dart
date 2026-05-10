@@ -253,6 +253,174 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return DateTime.now().difference(_lastWeighIn!).inDays >= 7;
   }
 
+  // ─── DELETE ACCOUNT ───────────────────────────────────────────────────
+  Future<void> _confirmDeleteAccount() async {
+    bool confirmed = false;
+    final passCtrl = TextEditingController();
+
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(),
+      builder: (_) => StatefulBuilder(builder: (ctx, setS) {
+        bool deleting = false;
+        String err = '';
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+              24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 32),
+          child: Column(mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Center(child: Container(width: 36, height: 4, color: AppColors.border)),
+            const SizedBox(height: 20),
+            const Icon(Icons.warning_amber_rounded, color: AppColors.danger, size: 40),
+            const SizedBox(height: 12),
+            Text('Delete Account',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.dmSans(
+                    fontSize: 22, fontWeight: FontWeight.w800,
+                    color: AppColors.danger)),
+            const SizedBox(height: 8),
+            Text(
+                'This will permanently delete your account and all your data (profile, steps, quests, check-ins). This cannot be undone.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.dmSans(
+                    fontSize: 13, color: AppColors.textSecondary, height: 1.5)),
+            const SizedBox(height: 20),
+            Text('Confirm your password to continue',
+                style: GoogleFonts.dmSans(
+                    fontSize: 13, fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary)),
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                  color: AppColors.card,
+                  border: Border.all(color: AppColors.border)),
+              child: TextField(
+                controller: passCtrl,
+                obscureText: true,
+                style: GoogleFonts.dmSans(
+                    color: AppColors.textPrimary, fontSize: 15),
+                cursorColor: AppColors.danger,
+                decoration: InputDecoration(
+                  hintText: 'Your password',
+                  hintStyle: GoogleFonts.dmSans(
+                      color: AppColors.textMuted, fontSize: 14),
+                  prefixIcon: const Icon(Icons.lock_outline_rounded,
+                      color: AppColors.textSecondary, size: 20),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 16)),
+              ),
+            ),
+            if (err.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                    color: AppColors.danger.withOpacity(0.08),
+                    border: Border.all(
+                        color: AppColors.danger.withOpacity(0.35))),
+                child: Text(err,
+                    style: GoogleFonts.dmSans(
+                        fontSize: 13,
+                        color: AppColors.danger,
+                        fontWeight: FontWeight.w600)),
+              ),
+            ],
+            const SizedBox(height: 20),
+            GestureDetector(
+              onTap: deleting
+                  ? null
+                  : () async {
+                      final user = FirebaseAuth.instance.currentUser;
+                      if (user == null) return;
+                      final pass = passCtrl.text.trim();
+                      if (pass.isEmpty) {
+                        setS(() => err = 'Enter your password.');
+                        return;
+                      }
+                      setS(() { deleting = true; err = ''; });
+                      try {
+                        // Re-authenticate
+                        final cred = EmailAuthProvider.credential(
+                            email: user.email!, password: pass);
+                        await user.reauthenticateWithCredential(cred);
+                        // Delete Firestore data
+                        final uid = user.uid;
+                        final fs = FirebaseFirestore.instance;
+                        final sub = ['weightLog', 'checkins'];
+                        for (final col in sub) {
+                          final docs = await fs
+                              .collection('users')
+                              .doc(uid)
+                              .collection(col)
+                              .get();
+                          for (final d in docs.docs) {
+                            await d.reference.delete();
+                          }
+                        }
+                        await fs.collection('users').doc(uid).delete();
+                        // Delete auth account
+                        await user.delete();
+                        confirmed = true;
+                        if (ctx.mounted) Navigator.pop(ctx);
+                      } on FirebaseAuthException catch (e) {
+                        setS(() {
+                          deleting = false;
+                          err = e.code == 'wrong-password' ||
+                                  e.code == 'invalid-credential'
+                              ? 'Incorrect password.'
+                              : 'Could not delete account: ${e.message}';
+                        });
+                      } catch (e) {
+                        setS(() {
+                          deleting = false;
+                          err = 'Something went wrong. Try again.';
+                        });
+                      }
+                    },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                height: 54,
+                decoration: BoxDecoration(
+                  color: deleting
+                      ? AppColors.danger.withOpacity(0.4)
+                      : AppColors.danger,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Center(
+                  child: deleting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
+                      : Text('Delete my account permanently',
+                          style: GoogleFonts.dmSans(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            GestureDetector(
+              onTap: () => Navigator.pop(ctx),
+              child: Center(
+                child: Text('Cancel',
+                    style: GoogleFonts.dmSans(
+                        fontSize: 14,
+                        color: AppColors.textMuted,
+                        fontWeight: FontWeight.w600)),
+              ),
+            ),
+          ]),
+        );
+      }),
+    );
+  }
+
   String get _nextWeighIn {
     if (_lastWeighIn == null) return '';
     final diff = (_lastWeighIn!.add(const Duration(days: 7))).difference(DateTime.now()).inDays + 1;
@@ -446,6 +614,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         : bmi < 18.5 ? AppColors.neon2 : bmi < 25 ? AppColors.success
         : bmi < 30 ? AppColors.warning : AppColors.danger;
 
+    final currentUser = FirebaseAuth.instance.currentUser;
+    final isEmailUser = currentUser?.providerData
+            .any((p) => p.providerId == 'password') ?? false;
+    final isVerified = currentUser?.emailVerified ?? true;
+
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(child: SingleChildScrollView(
@@ -465,11 +638,82 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Row(children: [
               _iconBtn(Icons.edit_outlined, _showEdit),
               const SizedBox(width: 8),
-              _iconBtn(Icons.logout_rounded, () async {
-                await FirebaseAuth.instance.signOut();
-              }),
+              // Account menu: sign out + delete account
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert_rounded,
+                    color: AppColors.textSecondary, size: 20),
+                color: AppColors.card,
+                shape: const RoundedRectangleBorder(),
+                onSelected: (val) async {
+                  if (val == 'signout') {
+                    await FirebaseAuth.instance.signOut();
+                  } else if (val == 'delete') {
+                    await _confirmDeleteAccount();
+                  }
+                },
+                itemBuilder: (_) => [
+                  PopupMenuItem(
+                    value: 'signout',
+                    child: Row(children: [
+                      const Icon(Icons.logout_rounded,
+                          color: AppColors.textSecondary, size: 18),
+                      const SizedBox(width: 10),
+                      Text('Sign out',
+                          style: GoogleFonts.dmSans(
+                              color: AppColors.textPrimary, fontSize: 14)),
+                    ]),
+                  ),
+                  PopupMenuItem(
+                    value: 'delete',
+                    child: Row(children: [
+                      const Icon(Icons.delete_forever_rounded,
+                          color: AppColors.danger, size: 18),
+                      const SizedBox(width: 10),
+                      Text('Delete account',
+                          style: GoogleFonts.dmSans(
+                              color: AppColors.danger, fontSize: 14)),
+                    ]),
+                  ),
+                ],
+              ),
             ]),
           ]),
+
+          // Email verification banner
+          if (isEmailUser && !isVerified) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withOpacity(0.08),
+                border: Border.all(color: AppColors.warning.withOpacity(0.5))),
+              child: Row(children: [
+                const Icon(Icons.email_outlined,
+                    color: AppColors.warning, size: 18),
+                const SizedBox(width: 10),
+                Expanded(child: Text(
+                  'Verify your email to keep your account secure.',
+                  style: GoogleFonts.dmSans(
+                      fontSize: 12, color: AppColors.warning))),
+                GestureDetector(
+                  onTap: () async {
+                    await currentUser?.sendEmailVerification();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text('Verification email sent!',
+                            style: GoogleFonts.dmSans()),
+                        backgroundColor:
+                            AppColors.success.withOpacity(0.85)));
+                    }
+                  },
+                  child: Text('Resend',
+                      style: GoogleFonts.dmSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.warning))),
+              ]),
+            ),
+          ],
           const SizedBox(height: 20),
 
           // Avatar card

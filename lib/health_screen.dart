@@ -155,7 +155,8 @@ class _HealthScreenState extends State<HealthScreen> {
       'height': double.tryParse(_heightCtrl.text),
       'waist': double.tryParse(_waistCtrl.text),
       'neck': double.tryParse(_neckCtrl.text),
-      'hip': double.tryParse(_hipCtrl.text),
+      // Only store hip for Female; clear it for Male (not used in formula)
+      'hip': _gender == 'Female' ? double.tryParse(_hipCtrl.text) : null,
       'gender': _gender, 'activity': _activity, 'dietType': _dietType,
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
@@ -344,8 +345,11 @@ class _HealthScreenState extends State<HealthScreen> {
                       Expanded(child: _statBox(_neckCtrl, 'Neck', 'cm',
                         action: TextInputAction.next)),
                       const SizedBox(width: 8),
-                      Expanded(child: _statBox(_hipCtrl, _gender == 'Female' ? 'Hip' : 'Hip ♀', 'cm',
-                        action: TextInputAction.done, onDone: _analyse)),
+                      // Hip is only used in the female Navy body-fat formula
+                      Expanded(child: _gender == 'Female'
+                        ? _statBox(_hipCtrl, 'Hip', 'cm',
+                            action: TextInputAction.done, onDone: _analyse)
+                        : _lockedHipBox()),
                     ]),
                     const SizedBox(height: 10),
 
@@ -422,6 +426,30 @@ class _HealthScreenState extends State<HealthScreen> {
           Text(unit, style: GoogleFonts.dmSans(fontSize: 11, color: AppColors.textMuted)),
         ]),
       ]));
+
+  /// Shown in place of the hip field when gender is Male.
+  /// Hip measurement is not used in the male Navy body-fat formula.
+  Widget _lockedHipBox() => Container(
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(
+      color: AppColors.bg,
+      border: Border.all(color: AppColors.border.withOpacity(0.4))),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Text('Hip', style: GoogleFonts.pressStart2p(
+          fontSize: 7, color: AppColors.textMuted.withOpacity(0.5))),
+        const SizedBox(width: 4),
+        const Icon(Icons.lock_outline_rounded,
+          color: AppColors.textMuted, size: 10),
+      ]),
+      const SizedBox(height: 6),
+      Text('N/A', style: GoogleFonts.dmSans(
+        fontSize: 22, fontWeight: FontWeight.w700,
+        color: AppColors.textMuted.withOpacity(0.4))),
+      const SizedBox(height: 2),
+      Text('♂ not needed', style: GoogleFonts.dmSans(
+        fontSize: 9, color: AppColors.textMuted.withOpacity(0.5))),
+    ]));
 
   Widget _resultsSection() {
     final bmi  = _result!['bmi'] as double;

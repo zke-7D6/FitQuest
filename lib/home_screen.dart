@@ -6,7 +6,6 @@ import 'health_screen.dart';
 import 'steps_screen.dart';
 import 'quest_screen.dart';
 import 'analytics_screen.dart';
-import 'social_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -24,7 +23,6 @@ class _HomeScreenState extends State<HomeScreen> {
     HealthScreen(),
     QuestScreen(),
     AnalyticsScreen(),
-    SocialScreen(),
   ];
 
   @override
@@ -43,7 +41,6 @@ class _HomeScreenState extends State<HomeScreen> {
       _NavItem(Icons.favorite_rounded, Icons.favorite_border_rounded, 'Health'),
       _NavItem(Icons.explore_rounded, Icons.explore_outlined, 'Quests'),
       _NavItem(Icons.insights_rounded, Icons.insights_outlined, 'Stats'),
-      _NavItem(Icons.groups_rounded, Icons.groups_outlined, 'Social'),
     ];
 
     return Container(
@@ -93,7 +90,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           height: selected ? 36 : 28,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: selected ? AppColors.accent.withOpacity(0.15) : Colors.transparent,
+                            color: selected
+                                ? AppColors.accent.withOpacity(0.15)
+                                : Colors.transparent,
                             boxShadow: selected
                                 ? [
                                     BoxShadow(
